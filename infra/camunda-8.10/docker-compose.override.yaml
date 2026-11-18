@@ -1,0 +1,10 @@
+# Chỉnh riêng của BPM Lab, không sửa file gốc của Camunda.
+# Docker Compose tự gộp file này với docker-compose.yaml khi chạy `docker compose ...` (không có -f).
+# Không áp dụng khi chạy `docker compose -f docker-compose-full.yaml ...`.
+services:
+  orchestration:
+    environment:
+      # Giữ lịch sử process instance đã kết thúc trong secondary storage (RDBMS: H2/PostgreSQL) 1 năm.
+      # = camunda.data.secondary-storage.rdbms.history.default-history-ttl (mặc định P30D)
+      # Dùng P365D vì java.time.Duration không hiểu P1Y.
+      - CAMUNDA_DATA_SECONDARYSTORAGE_RDBMS_HISTORY_DEFAULTHISTORYTTL=P365D

@@ -1,0 +1,14 @@
+# Profile "test" (bật bằng @ActiveProfiles("test")): chỉ chứa phần KHÁC với src/main/resources/application.yaml.
+# Không đặt tên file là application.yaml: nó sẽ che mất file cùng tên ở main, test chạy với config khác app thật.
+camunda:
+  process-test:
+    # Dùng chung 1 engine cho mọi test class -> chạy nhanh hơn
+    runtime-mode: shared
+    coverage:
+      # Mặc định là target/ (kiểu Maven); đưa về thư mục build của Gradle
+      report-directory: build/reports/camunda-coverage
+
+logging:
+  level:
+    org.testcontainers: warn
+    tc: error

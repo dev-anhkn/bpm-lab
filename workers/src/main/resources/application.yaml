@@ -1,0 +1,26 @@
+spring:
+  application:
+    name: bpm-lab-workers
+
+# Worker thuần: không mở cổng HTTP, chỉ kết nối ra Camunda (gRPC/REST) để nhận job.
+
+
+camunda:
+  client:
+    mode: self-managed
+    grpc-address: http://localhost:26500
+    rest-address: http://localhost:8080
+    # Lightweight compose để unprotectedApi=true nên chưa cần auth.
+    # Khi chuyển sang docker-compose-full (Keycloak): method: oidc + client-id/client-secret
+    auth:
+      method: none
+    # Môi trường khác: không sửa file này, ghi đè bằng biến môi trường
+    # (CAMUNDA_CLIENT_GRPCADDRESS, CAMUNDA_CLIENT_RESTADDRESS) hoặc application-<profile>.yaml
+
+# Log chỉ ra console; appender và pattern khai báo ở logback-spring.xml, ở đây chỉ đặt mức log.
+# Local: xem ở terminal; server (systemd): journald thu stdout -> journalctl -u <service>
+logging:
+  level:
+    root: info
+    com.bpm.lab: debug   # code của mình
+    io.camunda: info    # client/worker của Camunda; đổi debug khi cần xem poll/activate job

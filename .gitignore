@@ -1,0 +1,21 @@
+# Build
+target/
+build/
+.gradle/
+!gradle/wrapper/gradle-wrapper.jar
+*.class
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# Camunda local data & secrets
+infra/**/camunda-data/*
+!infra/**/camunda-data/.gitkeep
+infra/**/secrets/*
+!infra/**/secrets/.gitignore
+
+# Logs
+*.log

@@ -1,0 +1,58 @@
+import org.springframework.boot.gradle.plugin.SpringBootPlugin
+
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '4.1.2'
+}
+
+// group + tên project = package gốc (com.bpm.lab.workers)
+group = 'com.bpm.lab'
+version = '0.0.1'
+description = 'BPM Lab - job worker cho Camunda 8'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+def camundaVersion = '8.10.9'
+
+dependencies {
+    // BOM của Spring Boot (thay cho plugin io.spring.dependency-management, xem docs/adr/0001-stack.md)
+    implementation platform(SpringBootPlugin.BOM_COORDINATES)
+
+    // Starter gốc: auto-configuration, đọc application.yaml, logging (SLF4J + Logback ra console)
+    implementation 'org.springframework.boot:spring-boot-starter'
+
+    // Camunda client + @JobWorker + @Deployment
+    implementation "io.camunda:camunda-spring-boot-starter:${camundaVersion}"
+
+    // Lombok: chỉ cần lúc biên dịch, không đóng vào jar. Phiên bản lấy từ BOM của Spring Boot.
+    // BOM ở 'implementation' không áp cho annotationProcessor nên phải khai báo platform riêng.
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor platform(SpringBootPlugin.BOM_COORDINATES)
+    annotationProcessor 'org.projectlombok:lombok'
+    testCompileOnly 'org.projectlombok:lombok'
+    testAnnotationProcessor platform(SpringBootPlugin.BOM_COORDINATES)
+    testAnnotationProcessor 'org.projectlombok:lombok'
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    // Test quy trình: tự dựng engine bằng Testcontainers (cần Docker)
+    testImplementation "io.camunda:camunda-process-test-spring:${camundaVersion}"
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+// Chỉ khi chạy dev bằng bootRun: ép bật màu log, vì Gradle không cấp terminal cho app nên Spring không tự nhận ra.
+// Không ảnh hưởng file jar chạy trên server.
+tasks.named('bootRun', JavaExec) {
+    systemProperty 'spring.output.ansi.enabled', 'always'
+}
+
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
+}

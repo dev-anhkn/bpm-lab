@@ -1,0 +1,53 @@
+{
+  "components": [
+    {
+      "label": "Mã khách hàng",
+      "id": "Field_customerId",
+      "type": "textfield",
+      "key": "customerId",
+      "readonly": true,
+      "disabled": false
+    },
+    {
+      "label": "Hạn mức đề nghị (VND)",
+      "id": "Field_requestedLimit",
+      "type": "number",
+      "key": "requestedLimit",
+      "readonly": true
+    },
+    {
+      "label": "Quyết định",
+      "values": [
+        {
+          "label": "Duyệt",
+          "value": "APPROVE"
+        },
+        {
+          "label": "Từ chối",
+          "value": "REJECT"
+        }
+      ],
+      "id": "Field_decision",
+      "type": "radio",
+      "key": "decision",
+      "validate": {
+        "required": true
+      }
+    },
+    {
+      "label": "Ý kiến",
+      "id": "Field_comment",
+      "type": "textarea",
+      "key": "comment"
+    }
+  ],
+  "id": "hello-approval-form",
+  "type": "default",
+  "executionPlatform": "Camunda Cloud",
+  "executionPlatformVersion": "8.10.0",
+  "schemaVersion": 19,
+  "exporter": {
+    "name": "Camunda Modeler",
+    "version": "5.53.0"
+  }
+}
