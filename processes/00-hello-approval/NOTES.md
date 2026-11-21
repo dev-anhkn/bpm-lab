@@ -6,9 +6,9 @@
 - Kết quả: APPROVE → cập nhật hạn mức (job `hello-approval.apply-limit`); REJECT → kết thúc "Bị từ chối".
 - SLA (demo, rút ngắn để thử): nhắc mỗi 2', báo cấp trên sau 3', hết hạn sau 5'.
 
-Process id `hello-approval` giữ nguyên qua mọi version. File v1/v2/v3 trước đây tách riêng
-(`hello-approval-v2.bpmn`, `-v3.bpmn`), gộp về một file `hello-approval.bpmn` ngày 18/11 – xem lịch sử bằng
-`git log -p -- processes/00-hello-approval/hello-approval.bpmn`.
+Process id `hello-approval` giữ nguyên qua mọi version. Mỗi version là một file riêng
+`hello-approval-v1.bpmn` … `hello-approval-v4.bpmn` (21/11 quay lại cách tách file, bỏ file gộp `hello-approval.bpmn`).
+Deploy file nào thì version đó thành bản mới nhất trên engine.
 
 ## Version
 

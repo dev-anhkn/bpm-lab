@@ -64,8 +64,8 @@ cd workers && ./gradlew test
 Lưu ý:
 - Deploy tay từ 15/11 (đã gỡ `@Deployment` khỏi worker). Chiến lược deploy chính thức còn mở → ADR 0002.
 - `SmokeTestProcessTest` đang `@Disabled` vì engine test chưa có model; bật lại khi chốt cách deploy.
-- Version **file** (git) khác version **process** (engine): sửa thẳng `hello-approval.bpmn`, không tạo `-v2.bpmn`;
-  engine tự tăng version khi deploy nội dung mới.
+- Mỗi version của model là một file riêng `<process>-vN.bpmn` (vd `hello-approval-v4.bpmn`), cùng process id.
+  Version **file** khác version **process** (engine): deploy file nào thì engine tăng version và file đó thành bản mới nhất.
 
 ## Git
 
