@@ -11,18 +11,18 @@ import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-/** Worker cho service task "Cập nhật hạn mức" trong processes/00-hello-approval. */
+/** Các worker cho quy trình processes/00-hello-approval. */
 @Slf4j
 @Component
 public class HelloApprovalWorker {
 
-  /** Ngưỡng giả lập: core banking không cho cấp hạn mức vượt mức này. */
+  /** Hạn mức tối đa giả lập; vượt mức này thì core banking từ chối. */
   private static final long MAX_LIMIT = 1_000_000_000L;
 
-  /** Thời gian chờ giữa các lần retry khi lỗi kỹ thuật. */
+  /** Thời gian chờ trước khi engine cho retry job bị lỗi kỹ thuật. */
   private static final Duration RETRY_BACKOFF = Duration.ofSeconds(10);
 
-  // autoComplete mặc định = true: return Map -> starter tự complete job + merge biến vào process.
+  // Trả về Map thì starter tự complete job và ghi các biến này vào process.
   @JobWorker(type = "hello-approval.apply-limit")
   public Map<String, Object> applyLimit(
       ActivatedJob job,
@@ -30,8 +30,7 @@ public class HelloApprovalWorker {
       @Variable Long requestedLimit,
       @Variable Boolean simulateFailure) {
 
-    // pi/jobKey nằm trong MDC → không cần đưa vào message nữa.
-    // close() chạy cả khi throw → exception ra khỏi khối try thì MDC đã sạch.
+    // Gắn pi/jobKey vào log, tự dọn khi ra khỏi khối try (kể cả khi có exception).
     try (var _ = JobMdc.of(job)) {
       log.info(
           "hello-approval.apply-limit customer={} limit={} retriesLeft={}",
@@ -45,28 +44,23 @@ public class HelloApprovalWorker {
   private Map<String, Object> doApplyLimit(
       ActivatedJob job, Long requestedLimit, Boolean simulateFailure) {
 
-    // Bài thử a (lỗi kỹ thuật): start instance với {"simulateFailure": true}.
-    // Exception -> starter tự fail job, retries giảm 1; về 0 -> incident trong Operate.
+    // Lỗi kỹ thuật giả lập: fail job, giảm retries và chờ backoff; hết retries thì thành incident.
     if (Boolean.TRUE.equals(simulateFailure)) {
-      // Fail job có backoff: engine chờ RETRY_BACKOFF rồi mới cho worker lấy lại job.
-      // retries phải tự trừ 1 (throw exception thường thì SDK tự trừ, ở đây ta tự quyết).
       throw CamundaError.jobError(
           "Core banking timeout (giả lập)", null, job.getRetries() - 1, RETRY_BACKOFF);
     }
 
-    // Bài thử b (lỗi nghiệp vụ): hạn mức vượt ngưỡng -> BPMN error.
-    // Không retry, không incident: engine tìm error boundary event có code khớp và đi nhánh đó.
+    // Lỗi nghiệp vụ: ném BPMN error để đi nhánh error boundary LIMIT_EXCEEDED, không retry.
     if (requestedLimit != null && requestedLimit > MAX_LIMIT) {
       throw CamundaError.bpmnError(
           "LIMIT_EXCEEDED", "Hạn mức " + requestedLimit + " vượt ngưỡng " + MAX_LIMIT);
     }
 
-    // v0: giả lập gọi core.
+    // Giả lập gọi core thành công, trả về thời điểm áp dụng.
     return Map.of("appliedAt", Instant.now().toString());
   }
 
-  // v3: timer non-interrupting R/PT2M trên Task_Approve -> "Nhắc duyệt" (lặp mỗi 2 phút).
-  // Task MG duyệt vẫn còn; hàm void -> starter tự complete job, không thêm biến.
+  // Timer lặp mỗi 2 phút nhắc MG duyệt; task duyệt vẫn giữ nguyên, hàm void nên chỉ complete job.
   @JobWorker(type = "hello-approval.remind")
   public void remind(
       ActivatedJob job, @Variable String customerId, @Variable Long requestedLimit) {
@@ -76,8 +70,7 @@ public class HelloApprovalWorker {
     }
   }
 
-  // v3 (cách A): timer non-interrupting PT3M -> "Báo cấp trên". Task MG vẫn còn, chỉ báo động.
-  // Thực tế: gửi mail/chat cho cấp trên của người được giao.
+  // Sau 3 phút MG chưa duyệt thì báo cấp trên (thực tế là gửi mail/chat), task duyệt vẫn giữ.
   @JobWorker(type = "hello-approval.escalate")
   public void escalate(
       ActivatedJob job, @Variable String customerId, @Variable Long requestedLimit) {

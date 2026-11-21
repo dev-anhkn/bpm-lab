@@ -3,21 +3,7 @@ package com.bpm.lab.workers.logging;
 import io.camunda.client.api.response.ActivatedJob;
 import org.slf4j.MDC;
 
-/**
- * Gắn {@code pi} (processInstanceKey) và {@code jobKey} vào MDC trong lúc xử lý một job.
- *
- * <p>MDC là ThreadLocal. Worker chạy trên thread pool, thread xử lý xong job A sẽ được dùng lại cho
- * job B → nếu không xóa, log của B mang nhầm pi của A. Vì vậy luôn dùng với try-with-resources:
- *
- * <pre>{@code
- * try (var _ = JobMdc.of(job)) {
- *   log.info("..."); // dòng log có pi=... jobKey=...
- * }
- * }</pre>
- *
- * <p>close() chỉ xóa đúng các key mình đặt, không gọi MDC.clear(): MDC có thể đang giữ key của thứ
- * khác (vd traceId của tracing), clear() sẽ xóa luôn của họ.
- */
+/** Gắn pi/jobKey vào MDC khi xử lý job; dùng try-with-resources để thread sau không dính log cũ. */
 public final class JobMdc implements AutoCloseable {
 
   public static final String PROCESS_INSTANCE_KEY = "pi";
@@ -25,12 +11,14 @@ public final class JobMdc implements AutoCloseable {
 
   private JobMdc() {}
 
+  // Đặt pi/jobKey của job hiện tại vào MDC để mọi dòng log trong khối try đều có.
   public static JobMdc of(ActivatedJob job) {
     MDC.put(PROCESS_INSTANCE_KEY, String.valueOf(job.getProcessInstanceKey()));
     MDC.put(JOB_KEY, String.valueOf(job.getKey()));
     return new JobMdc();
   }
 
+  // Chỉ xóa đúng key mình đặt, không dùng MDC.clear() để khỏi xóa key khác như traceId.
   @Override
   public void close() {
     MDC.remove(PROCESS_INSTANCE_KEY);

@@ -13,7 +13,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class SayHelloWorker {
 
-  // autoComplete mặc định = true: return Map -> starter tự gọi complete job với các biến này.
+  // Tạo lời chào theo tên (trống thì gọi "bạn"), trả về Map để starter tự complete job.
   @JobWorker(type = "smoke.say-hello")
   public Map<String, Object> sayHello(ActivatedJob job, @Variable("name") String name) {
     try (var _ = JobMdc.of(job)) {

@@ -3,10 +3,7 @@
 
   <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
 
-  <!--
-    pi / jobKey lấy từ MDC (JobMdc). Ngoài lúc xử lý job MDC rỗng → %replace xóa chuỗi " pi= jobKey="
-    để dòng log thường không bị dính phần rỗng.
-  -->
+  <!-- In pi/jobKey từ MDC; log ngoài job thì MDC rỗng nên %replace bỏ luôn phần " pi= jobKey=". -->
   <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
     <encoder>
       <pattern>%clr(%d{HH:mm:ss.SSS}){faint} %clr([%thread]){faint} %clr(%-5level){} %clr(%logger{36}){cyan}%clr(%replace( pi=%X{pi} jobKey=%X{jobKey}){'^ pi= jobKey=$', ''}){magenta} %clr(-){faint} %msg%n</pattern>
