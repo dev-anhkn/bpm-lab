@@ -1,0 +1,268 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- v3: SLA trên Task_Approve.
+     Nhắc R/PT2M (non-interrupting) -> Báo cấp trên PT3M (non-interrupting, cách A)
+     -> Hết hạn PT5M (interrupting) -> Cấp trên duyệt thay rồi quay về gateway (cách B).
+     v2 = error boundary LIMIT_EXCEEDED, v1 = hello-approval.bpmn -->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:modeler="http://camunda.org/schema/modeler/1.0"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  id="Definitions_HelloApproval"
+                  targetNamespace="http://bpmn.io/schema/bpmn"
+                  exporter="Camunda Modeler" exporterVersion="5.0.0"
+                  modeler:executionPlatform="Camunda Cloud"
+                  modeler:executionPlatformVersion="8.10.0">
+  <bpmn:error id="Error_LimitExceeded" name="Vượt hạn mức" errorCode="LIMIT_EXCEEDED" />
+  <bpmn:process id="hello-approval" name="Hello Approval (đề nghị hạn mức)" isExecutable="true">
+    <bpmn:startEvent id="Start_Requested" name="Có đề nghị hạn mức">
+      <bpmn:outgoing>Flow_ToApprove</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="Task_Approve" name="MG duyệt đề nghị">
+      <bpmn:extensionElements>
+        <zeebe:userTask />
+        <zeebe:formDefinition formId="hello-approval-form" />
+        <zeebe:assignmentDefinition candidateUsers="demo" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToApprove</bpmn:incoming>
+      <bpmn:outgoing>Flow_ApprovedByManager</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <!-- SLA 1: nhắc lặp mỗi 2 phút, task vẫn giữ nguyên -->
+    <bpmn:boundaryEvent id="Timer_RemindApproval" name="Nhắc mỗi 2'" cancelActivity="false" attachedToRef="Task_Approve">
+      <bpmn:outgoing>Flow_ToRemind</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="TimerDef_RemindApproval">
+        <bpmn:timeCycle xsi:type="bpmn:tFormalExpression">R/PT2M</bpmn:timeCycle>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+    <bpmn:serviceTask id="Task_RemindApproval" name="Nhắc duyệt">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="hello-approval.remind" retries="3" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToRemind</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToEndReminded</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="End_Reminded" name="Đã nhắc">
+      <bpmn:incoming>Flow_ToEndReminded</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <!-- SLA 2 (cách A): báo cấp trên, task MG vẫn giữ -->
+    <bpmn:boundaryEvent id="Timer_EscalateApproval" name="Báo cấp trên 3'" cancelActivity="false" attachedToRef="Task_Approve">
+      <bpmn:outgoing>Flow_ToEscalate</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="TimerDef_EscalateApproval">
+        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">PT3M</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+    <bpmn:serviceTask id="Task_EscalateApproval" name="Báo cấp trên">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="hello-approval.escalate" retries="3" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToEscalate</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToEndEscalated</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="End_Escalated" name="Đã báo cấp trên">
+      <bpmn:incoming>Flow_ToEndEscalated</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <!-- SLA 3 (cách B): hết hạn -> hủy task MG, chuyển cấp trên duyệt thay -->
+    <bpmn:boundaryEvent id="Timer_ApprovalExpired" name="Hết hạn 5'" attachedToRef="Task_Approve">
+      <bpmn:outgoing>Flow_ToSupervisor</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="TimerDef_ApprovalExpired">
+        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">PT5M</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+    <bpmn:userTask id="Task_ApproveBySupervisor" name="Cấp trên duyệt thay">
+      <bpmn:extensionElements>
+        <zeebe:userTask />
+        <zeebe:formDefinition formId="hello-approval-form" />
+        <!-- lab chỉ có user demo; thực tế dùng candidateGroups="supervisor" -->
+        <zeebe:assignmentDefinition candidateUsers="demo" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToSupervisor</bpmn:incoming>
+      <bpmn:outgoing>Flow_ApprovedBySupervisor</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <bpmn:exclusiveGateway id="Gateway_MergeApproval">
+      <bpmn:incoming>Flow_ApprovedByManager</bpmn:incoming>
+      <bpmn:incoming>Flow_ApprovedBySupervisor</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToDecision</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:exclusiveGateway id="Gateway_Decision" name="Quyết định?">
+      <bpmn:incoming>Flow_ToDecision</bpmn:incoming>
+      <bpmn:outgoing>Flow_Approved</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Rejected</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="Task_ApplyLimit" name="Cập nhật hạn mức">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="hello-approval.apply-limit" retries="3" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_Approved</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToEndApplied</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="End_Applied" name="Đã cập nhật">
+      <bpmn:incoming>Flow_ToEndApplied</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="End_Rejected" name="Bị từ chối">
+      <bpmn:incoming>Flow_Rejected</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:boundaryEvent id="Boundary_LimitExceeded" name="Vượt ngưỡng" attachedToRef="Task_ApplyLimit">
+      <bpmn:extensionElements>
+        <zeebe:errorEventDefinition errorMessageVariable="limitErrorMessage" />
+      </bpmn:extensionElements>
+      <bpmn:outgoing>Flow_ToEndLimitExceeded</bpmn:outgoing>
+      <bpmn:errorEventDefinition id="ErrorDef_LimitExceeded" errorRef="Error_LimitExceeded" />
+    </bpmn:boundaryEvent>
+    <bpmn:endEvent id="End_LimitExceeded" name="Vượt hạn mức">
+      <bpmn:incoming>Flow_ToEndLimitExceeded</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="Flow_ToApprove" sourceRef="Start_Requested" targetRef="Task_Approve" />
+    <bpmn:sequenceFlow id="Flow_ToRemind" sourceRef="Timer_RemindApproval" targetRef="Task_RemindApproval" />
+    <bpmn:sequenceFlow id="Flow_ToEndReminded" sourceRef="Task_RemindApproval" targetRef="End_Reminded" />
+    <bpmn:sequenceFlow id="Flow_ToEscalate" sourceRef="Timer_EscalateApproval" targetRef="Task_EscalateApproval" />
+    <bpmn:sequenceFlow id="Flow_ToEndEscalated" sourceRef="Task_EscalateApproval" targetRef="End_Escalated" />
+    <bpmn:sequenceFlow id="Flow_ToSupervisor" sourceRef="Timer_ApprovalExpired" targetRef="Task_ApproveBySupervisor" />
+    <bpmn:sequenceFlow id="Flow_ApprovedByManager" sourceRef="Task_Approve" targetRef="Gateway_MergeApproval" />
+    <bpmn:sequenceFlow id="Flow_ApprovedBySupervisor" sourceRef="Task_ApproveBySupervisor" targetRef="Gateway_MergeApproval" />
+    <bpmn:sequenceFlow id="Flow_ToDecision" sourceRef="Gateway_MergeApproval" targetRef="Gateway_Decision" />
+    <bpmn:sequenceFlow id="Flow_Approved" name="Duyệt" sourceRef="Gateway_Decision" targetRef="Task_ApplyLimit">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">=decision = "APPROVE"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Rejected" name="Từ chối" sourceRef="Gateway_Decision" targetRef="End_Rejected">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">=decision = "REJECT"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_ToEndApplied" sourceRef="Task_ApplyLimit" targetRef="End_Applied" />
+    <bpmn:sequenceFlow id="Flow_ToEndLimitExceeded" sourceRef="Boundary_LimitExceeded" targetRef="End_LimitExceeded" />
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="hello-approval">
+      <bpmndi:BPMNShape id="Start_Requested_di" bpmnElement="Start_Requested">
+        <dc:Bounds x="152" y="282" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="128" y="325" width="84" height="27" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Approve_di" bpmnElement="Task_Approve">
+        <dc:Bounds x="240" y="260" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ApproveBySupervisor_di" bpmnElement="Task_ApproveBySupervisor">
+        <dc:Bounds x="240" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_MergeApproval_di" bpmnElement="Gateway_MergeApproval" isMarkerVisible="true">
+        <dc:Bounds x="395" y="275" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_Decision_di" bpmnElement="Gateway_Decision" isMarkerVisible="true">
+        <dc:Bounds x="495" y="275" width="50" height="50" />
+        <bpmndi:BPMNLabel><dc:Bounds x="491" y="251" width="58" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ApplyLimit_di" bpmnElement="Task_ApplyLimit">
+        <dc:Bounds x="610" y="260" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Applied_di" bpmnElement="End_Applied">
+        <dc:Bounds x="772" y="282" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="760" y="325" width="60" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_LimitExceeded_di" bpmnElement="End_LimitExceeded">
+        <dc:Bounds x="772" y="392" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="754" y="435" width="72" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Rejected_di" bpmnElement="End_Rejected">
+        <dc:Bounds x="772" y="502" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="766" y="545" width="48" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_RemindApproval_di" bpmnElement="Task_RemindApproval">
+        <dc:Bounds x="150" y="420" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Reminded_di" bpmnElement="End_Reminded">
+        <dc:Bounds x="182" y="542" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="179" y="585" width="42" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_EscalateApproval_di" bpmnElement="Task_EscalateApproval">
+        <dc:Bounds x="290" y="420" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Escalated_di" bpmnElement="End_Escalated">
+        <dc:Bounds x="322" y="542" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="300" y="585" width="80" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Timer_ApprovalExpired_di" bpmnElement="Timer_ApprovalExpired">
+        <dc:Bounds x="272" y="242" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="300" y="212" width="50" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Timer_RemindApproval_di" bpmnElement="Timer_RemindApproval">
+        <dc:Bounds x="247" y="322" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="196" y="365" width="60" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Timer_EscalateApproval_di" bpmnElement="Timer_EscalateApproval">
+        <dc:Bounds x="297" y="322" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="323" y="365" width="78" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Boundary_LimitExceeded_di" bpmnElement="Boundary_LimitExceeded">
+        <dc:Bounds x="642" y="322" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="682" y="365" width="62" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="Flow_ToApprove_di" bpmnElement="Flow_ToApprove">
+        <di:waypoint x="188" y="300" />
+        <di:waypoint x="240" y="300" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ApprovedByManager_di" bpmnElement="Flow_ApprovedByManager">
+        <di:waypoint x="340" y="300" />
+        <di:waypoint x="395" y="300" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToSupervisor_di" bpmnElement="Flow_ToSupervisor">
+        <di:waypoint x="290" y="242" />
+        <di:waypoint x="290" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ApprovedBySupervisor_di" bpmnElement="Flow_ApprovedBySupervisor">
+        <di:waypoint x="340" y="140" />
+        <di:waypoint x="420" y="140" />
+        <di:waypoint x="420" y="275" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToDecision_di" bpmnElement="Flow_ToDecision">
+        <di:waypoint x="445" y="300" />
+        <di:waypoint x="495" y="300" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Approved_di" bpmnElement="Flow_Approved">
+        <di:waypoint x="545" y="300" />
+        <di:waypoint x="610" y="300" />
+        <bpmndi:BPMNLabel><dc:Bounds x="563" y="282" width="30" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Rejected_di" bpmnElement="Flow_Rejected">
+        <di:waypoint x="520" y="325" />
+        <di:waypoint x="520" y="520" />
+        <di:waypoint x="772" y="520" />
+        <bpmndi:BPMNLabel><dc:Bounds x="528" y="423" width="40" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToEndApplied_di" bpmnElement="Flow_ToEndApplied">
+        <di:waypoint x="710" y="300" />
+        <di:waypoint x="772" y="300" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToEndLimitExceeded_di" bpmnElement="Flow_ToEndLimitExceeded">
+        <di:waypoint x="660" y="358" />
+        <di:waypoint x="660" y="410" />
+        <di:waypoint x="772" y="410" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToRemind_di" bpmnElement="Flow_ToRemind">
+        <di:waypoint x="265" y="358" />
+        <di:waypoint x="265" y="390" />
+        <di:waypoint x="200" y="390" />
+        <di:waypoint x="200" y="420" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToEndReminded_di" bpmnElement="Flow_ToEndReminded">
+        <di:waypoint x="200" y="500" />
+        <di:waypoint x="200" y="542" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToEscalate_di" bpmnElement="Flow_ToEscalate">
+        <di:waypoint x="315" y="358" />
+        <di:waypoint x="315" y="390" />
+        <di:waypoint x="340" y="390" />
+        <di:waypoint x="340" y="420" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToEndEscalated_di" bpmnElement="Flow_ToEndEscalated">
+        <di:waypoint x="340" y="500" />
+        <di:waypoint x="340" y="542" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

@@ -1,5 +1,6 @@
 package com.bpm.lab.workers.hello;
 
+import com.bpm.lab.workers.logging.JobMdc;
 import io.camunda.client.annotation.JobWorker;
 import io.camunda.client.annotation.Variable;
 import io.camunda.client.api.response.ActivatedJob;
@@ -29,13 +30,20 @@ public class HelloApprovalWorker {
       @Variable Long requestedLimit,
       @Variable Boolean simulateFailure) {
 
-    log.info(
-        "hello-approval.apply-limit customer={} limit={} pi={} jobKey={} retriesLeft={}",
-        customerId,
-        requestedLimit,
-        job.getProcessInstanceKey(),
-        job.getKey(),
-        job.getRetries());
+    // pi/jobKey nằm trong MDC → không cần đưa vào message nữa.
+    // close() chạy cả khi throw → exception ra khỏi khối try thì MDC đã sạch.
+    try (var _ = JobMdc.of(job)) {
+      log.info(
+          "hello-approval.apply-limit customer={} limit={} retriesLeft={}",
+          customerId,
+          requestedLimit,
+          job.getRetries());
+      return doApplyLimit(job, requestedLimit, simulateFailure);
+    }
+  }
+
+  private Map<String, Object> doApplyLimit(
+      ActivatedJob job, Long requestedLimit, Boolean simulateFailure) {
 
     // Bài thử a (lỗi kỹ thuật): start instance với {"simulateFailure": true}.
     // Exception -> starter tự fail job, retries giảm 1; về 0 -> incident trong Operate.
@@ -62,12 +70,10 @@ public class HelloApprovalWorker {
   @JobWorker(type = "hello-approval.remind")
   public void remind(
       ActivatedJob job, @Variable String customerId, @Variable Long requestedLimit) {
-    log.info(
-        "hello-approval.remind: nhắc MG duyệt customer={} limit={} pi={} jobKey={}",
-        customerId,
-        requestedLimit,
-        job.getProcessInstanceKey(),
-        job.getKey());
+    try (var _ = JobMdc.of(job)) {
+      log.info(
+          "hello-approval.remind: nhắc MG duyệt customer={} limit={}", customerId, requestedLimit);
+    }
   }
 
   // v3 (cách A): timer non-interrupting PT3M -> "Báo cấp trên". Task MG vẫn còn, chỉ báo động.
@@ -75,12 +81,11 @@ public class HelloApprovalWorker {
   @JobWorker(type = "hello-approval.escalate")
   public void escalate(
       ActivatedJob job, @Variable String customerId, @Variable Long requestedLimit) {
-    log.warn(
-        "hello-approval.escalate: MG chưa duyệt sau 3', báo cấp trên customer={} limit={} pi={}"
-            + " jobKey={}",
-        customerId,
-        requestedLimit,
-        job.getProcessInstanceKey(),
-        job.getKey());
+    try (var _ = JobMdc.of(job)) {
+      log.warn(
+          "hello-approval.escalate: MG chưa duyệt sau 3', báo cấp trên customer={} limit={}",
+          customerId,
+          requestedLimit);
+    }
   }
 }
